@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Calm vs Headspace Revenue Dynamics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117;
+    --surface: #181c27;
+    --surface2: #1e2333;
+    --border: rgba(255,255,255,0.07);
+    --text: #e8eaf0;
+    --muted: #8b90a0;
+    --calm: #4dd9c0;
+    --hs: #f59e4a;
+  }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .hero {
+    background: linear-gradient(135deg, #141828 0%, #0d1420 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 40px 36px;
+    text-align: center;
+  }
+  .hero-tag {
+    display: inline-block;
+    font-size: 11px; font-weight: 600; letter-spacing: .12em;
+    text-transform: uppercase;
+    color: #6c8ef5;
+    background: rgba(108,142,245,.12);
+    border: 1px solid rgba(108,142,245,.25);
+    border-radius: 20px;
+    padding: 4px 14px;
+    margin-bottom: 18px;
+  }
+  h1 {
+    font-size: clamp(26px, 4vw, 42px);
+    font-weight: 700;
+    letter-spacing: -.03em;
+    background: linear-gradient(135deg, #e8eaf0 0%, #a0a8c0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    font-size: 14.5px;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+  .main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 24px 60px;
+  }
+  .legend-pills {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13.5px; font-weight: 500;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 7px 18px 7px 11px;
+    cursor: pointer;
+  }
+  .pill.hidden { opacity: 0.45; }
+  .pill-dot {
+    width: 11px; height: 11px;
+    border-radius: 50%;
+  }
+  .pill-calm .pill-dot { background: var(--calm); }
+  .pill-hs .pill-dot { background: var(--hs); }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+  }
+  .chart-wrapper {
+    position: relative;
+    height: clamp(340px, 52vh, 560px);
+  }
+  .footnote {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 14px;
+    text-align: center;
+  }
+  .conclusion {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-top: 28px;
+  }
+  .conclusion h3 {
+    font-size: 13px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 12px;
+  }
+  #conclusion-text {
+    font-size: 14.5px;
+    line-height: 1.7;
+    color: #c8cad8;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-tag">Market Intelligence</div>
+  <h1>Calm and Headspace Revenue Comparison</h1>
+  <p class="subtitle">
+    In-App Revenue Dynamics • <span id="year-range">Loading…</span> • Source: AppMagic
+  </p>
+</div>
+
+<div class="main">
+  <div id="loading" style="text-align:center; padding:80px 0; color:var(--muted);">
+    <div style="display:inline-block; width:22px; height:22px; border:3px solid #333; border-top-color:#6c8ef5; border-radius:50%; animation:spin 1s linear infinite;"></div>
+    <p style="margin-top:16px;">Parsing data...</p>
+  </div>
+
+  <div id="chart-section" style="display:none">
+    <!-- Legend -->
+    <div class="legend-pills">
+      <div class="pill pill-calm" id="pill-calm" onclick="toggleLine(0)">
+        <span class="pill-dot"></span> Calm
+      </div>
+      <div class="pill pill-hs" id="pill-hs" onclick="toggleLine(1)">
+        <span class="pill-dot"></span> Headspace: Meditation & Sleep
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-card">
+      <div class="chart-wrapper">
+        <canvas id="revenueChart"></canvas>
+      </div>
+      <div class="footnote">* In-app revenue (USD) — Monthly figures — United States — All Stores</div>
+    </div>
+
+    <!-- Conclusion -->
+    <div class="conclusion">
+      <h3>Key Insight</h3>
+      <p id="conclusion-text"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Main script (оставил логику почти без изменений, только сократил) ───
+const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+
+function parseDate(str) {
+  const [mon, yr] = str.trim().split(' ');
+  return new Date(+yr, MONTHS[mon], 1);
+}
+function fmtMoney(v) {
+  if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return '$' + Math.round(v/1e3) + 'K';
+  return '$' + v;
+}
+
+let chart;
+
+function toggleLine(idx) {
+  const meta = chart.getDatasetMeta(idx);
+  meta.hidden = !meta.hidden;
+  chart.update();
+  const pill = idx === 0 ? document.getElementById('pill-calm') : document.getElementById('pill-hs');
+  pill.classList.toggle('hidden', meta.hidden);
+}
+
+const CSV_TEXT = `date,application,revenue
+Apr 2026,Calm,315518
+Mar 2026,Calm,3787304
+Feb 2026,Calm,3770430
+Jan 2026,Calm,4629036
+Dec 2025,Calm,3415762
+Nov 2025,Calm,3300152
+Oct 2025,Calm,3389134
+Sep 2025,Calm,3282672
+Aug 2025,Calm,3290318
+Jul 2025,Calm,3051754
+Jun 2025,Calm,2850896
+May 2025,Calm,3320360
+Apr 2025,Calm,3595466
+Mar 2025,Calm,4022484
+Feb 2025,Calm,3620530
+Jan 2025,Calm,4221443
+Dec 2024,Calm,3597717
+Nov 2024,Calm,3814711
+Oct 2024,Calm,3632240
+Sep 2024,Calm,3465661
+Aug 2024,Calm,3590266
+Jul 2024,Calm,3472985
+Jun 2024,Calm,3355600
+May 2024,Calm,3573748
+Apr 2024,Calm,3745186
+Mar 2024,Calm,4434400
+Feb 2024,Calm,4100012
+Jan 2024,Calm,5225282
+Dec 2023,Calm,4398764
+Nov 2023,Calm,4562668
+Oct 2023,Calm,4518614
+Sep 2023,Calm,4313614
+Aug 2023,Calm,4320074
+Jul 2023,Calm,4227688
+Jun 2023,Calm,4188776
+May 2023,Calm,4348456
+Apr 2023,Calm,4387944
+Mar 2023,Calm,5141752
+Feb 2023,Calm,4609612
+Jan 2023,Calm,5530196
+Dec 2022,Calm,4669454
+Nov 2022,Calm,5141500
+Oct 2022,Calm,4826622
+Sep 2022,Calm,4593280
+Aug 2022,Calm,4645310
+Jul 2022,Calm,4377718
+Jun 2022,Calm,4392774
+May 2022,Calm,4552040
+Apr 2022,Calm,4679870
+Mar 2022,Calm,5461840
+Feb 2022,Calm,4965706
+Jan 2022,Calm,5989870
+Dec 2021,Calm,5327614
+Nov 2021,Calm,5671462
+Oct 2021,Calm,5366218
+Sep 2021,Calm,5001552
+Aug 2021,Calm,5209234
+Jul 2021,Calm,5046040
+Jun 2021,Calm,4784980
+May 2021,Calm,4815524
+Apr 2021,Calm,4680086
+Apr 2026,Headspace: Meditation & Sleep,150585
+Mar 2026,Headspace: Meditation & Sleep,1681174
+Feb 2026,Headspace: Meditation & Sleep,1595407
+Jan 2026,Headspace: Meditation & Sleep,2107052
+Dec 2025,Headspace: Meditation & Sleep,1793782
+Nov 2025,Headspace: Meditation & Sleep,1695186
+Oct 2025,Headspace: Meditation & Sleep,1724734
+Sep 2025,Headspace: Meditation & Sleep,1616736
+Aug 2025,Headspace: Meditation & Sleep,1576948
+Jul 2025,Headspace: Meditation & Sleep,1402782
+Jun 2025,Headspace: Meditation & Sleep,1302124
+May 2025,Headspace: Meditation & Sleep,1457716
+Apr 2025,Headspace: Meditation & Sleep,1567022
+Mar 2025,Headspace: Meditation & Sleep,1798574
+Feb 2025,Headspace: Meditation & Sleep,1678432
+Jan 2025,Headspace: Meditation & Sleep,1968956
+Dec 2024,Headspace: Meditation & Sleep,1735196
+Nov 2024,Headspace: Meditation & Sleep,1862626
+Oct 2024,Headspace: Meditation & Sleep,1789552
+Sep 2024,Headspace: Meditation & Sleep,1700428
+Aug 2024,Headspace: Meditation & Sleep,1786256
+Jul 2024,Headspace: Meditation & Sleep,1689400
+Jun 2024,Headspace: Meditation & Sleep,1623234
+May 2024,Headspace: Meditation & Sleep,1724980
+Apr 2024,Headspace: Meditation & Sleep,1823026
+Mar 2024,Headspace: Meditation & Sleep,2131752
+Feb 2024,Headspace: Meditation & Sleep,2004360
+Jan 2024,Headspace: Meditation & Sleep,2467378
+Dec 2023,Headspace: Meditation & Sleep,2094908
+Nov 2023,Headspace: Meditation & Sleep,2302048
+Oct 2023,Headspace: Meditation & Sleep,2293478
+Sep 2023,Headspace: Meditation & Sleep,2182836
+Aug 2023,Headspace: Meditation & Sleep,2183870
+Jul 2023,Headspace: Meditation & Sleep,2058690
+Jun 2023,Headspace: Meditation & Sleep,2038200
+May 2023,Headspace: Meditation & Sleep,2131438
+Apr 2023,Headspace: Meditation & Sleep,2149936
+Mar 2023,Headspace: Meditation & Sleep,2614530
+Feb 2023,Headspace: Meditation & Sleep,2367256
+Jan 2023,Headspace: Meditation & Sleep,2743624
+Dec 2022,Headspace: Meditation & Sleep,2306458
+Nov 2022,Headspace: Meditation & Sleep,2638490
+Oct 2022,Headspace: Meditation & Sleep,2540486
+Sep 2022,Headspace: Meditation & Sleep,2429658
+Aug 2022,Headspace: Meditation & Sleep,2540578
+Jul 2022,Headspace: Meditation & Sleep,2436400
+Jun 2022,Headspace: Meditation & Sleep,2432022
+May 2022,Headspace: Meditation & Sleep,2508766
+Apr 2022,Headspace: Meditation & Sleep,2537168
+Mar 2022,Headspace: Meditation & Sleep,2988696
+Feb 2022,Headspace: Meditation & Sleep,2706682
+Jan 2022,Headspace: Meditation & Sleep,3236790
+Dec 2021,Headspace: Meditation & Sleep,2808526
+Nov 2021,Headspace: Meditation & Sleep,3213830
+Oct 2021,Headspace: Meditation & Sleep,3013484
+Sep 2021,Headspace: Meditation & Sleep,2828578
+Aug 2021,Headspace: Meditation & Sleep,2988474
+Jul 2021,Headspace: Meditation & Sleep,2866066
+Jun 2021,Headspace: Meditation & Sleep,2773658
+May 2021,Headspace: Meditation & Sleep,2878254
+Apr 2021,Headspace: Meditation & Sleep,2784800`;
+
+(function() {
+  const parsed = Papa.parse(CSV_TEXT.trim(), { header: true, skipEmptyLines: true });
+  const rows = parsed.data;
+
+  const calm = rows.filter(r => r.application === 'Calm')
+    .map(r => ({ date: parseDate(r.date), label: r.date.trim(), rev: +r.revenue }))
+    .sort((a,b) => a.date - b.date);
+
+  const hs = rows.filter(r => r.application.includes('Headspace'))
+    .map(r => ({ date: parseDate(r.date), label: r.date.trim(), rev: +r.revenue }))
+    .sort((a,b) => a.date - b.date);
+
+  // Year range
+  const years = [...calm, ...hs].map(r => r.date.getFullYear());
+  document.getElementById('year-range').textContent = Math.min(...years) + '–' + Math.max(...years);
+
+  // Build chart data
+  const labelSet = new Set([...calm.map(r=>r.label), ...hs.map(r=>r.label)]);
+  const labels = Array.from(labelSet).sort((a,b) => parseDate(a)-parseDate(b));
+
+  const calmMap = Object.fromEntries(calm.map(r=>[r.label, r.rev]));
+  const hsMap = Object.fromEntries(hs.map(r=>[r.label, r.rev]));
+
+  const ctx = document.getElementById('revenueChart').getContext('2d');
+
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Calm', data: labels.map(l => calmMap[l] ?? null), borderColor: '#4dd9c0', backgroundColor: 'rgba(77,217,192,0.12)', borderWidth: 3, tension: 0.35, pointRadius: 2.5, pointHoverRadius: 6 },
+        { label: 'Headspace', data: labels.map(l => hsMap[l] ?? null), borderColor: '#f59e4a', backgroundColor: 'rgba(245,158,74,0.12)', borderWidth: 3, tension: 0.35, pointRadius: 2.5, pointHoverRadius: 6 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { mode: 'index' } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6b7280', maxRotation: 45, font: {size: 11} }},
+        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6b7280', callback: v => fmtMoney(v), font: {size: 11} }}
+      }
+    }
+  });
+
+  // Short conclusion
+  const calmStart = calm[0].rev;
+  const calmEnd = calm[calm.length-1].rev;
+  const hsStart = hs[0].rev;
+  const hsEnd = hs[hs.length-1].rev;
+
+  const calmChg = Math.round(((calmEnd - calmStart)/calmStart) * 100);
+  const hsChg = Math.round(((hsEnd - hsStart)/hsStart) * 100);
+
+  document.getElementById('conclusion-text').innerHTML = `
+    Both Calm and Headspace demonstrated very similar revenue dynamics. 
+    After reaching their peak levels in 2022–early 2023, both applications 
+    experienced a <strong>substantial decline</strong> in monthly in-app revenue. 
+    By 2026, Calm’s revenue decreased by approximately <strong>${Math.abs(calmChg)}%</strong>, 
+    while Headspace’s revenue fell by about <strong>${Math.abs(hsChg)}%</strong> compared to their highest points.
+  `;
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('chart-section').style.display = 'block';
+})();
+</script>
+</body>
+</html>
